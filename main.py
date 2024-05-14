@@ -103,8 +103,10 @@ def get_movies(id: int=Path(ge=1,le=10))->sch_movie_data:
 @app.get("/movies/",tags=["movies"], response_model=list[sch_movie_data], status_code=200)
 def get_movies_by_category(category:str= Query(min_length=5,max_length=15))->list[sch_movie_data]:
     #es una linea for "item" es lo que devolvera y de ahi todo esta conectado por order high
-    data=[item for item in movies_data if item["category"]==category]
-    return JSONResponse(content=data,status_code=200)
+    #data=[item for item in movies_data if item["category"]==category]
+    db=Session()
+    result=db.query(MovieModel).filter(MovieModel.category==category).all()
+    return JSONResponse(content=jsonable_encoder(result),status_code=200)
 
 @app.post("/movies",tags=["movies"], response_model=dict,status_code=201)
 def create_movie(movie: sch_movie_data)->dict:
