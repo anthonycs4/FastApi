@@ -5,11 +5,13 @@ from pydantic import BaseModel, Field
 from typing import Coroutine, Optional, List
 from jwt_manager import create_token, validate_token
 from fastapi.security import HTTPBearer
-
-
+from config.database import Session, engine, Base
+from models.movie import Movie as MovieModel
+from fastapi.encoders import jsonable_encoder
 app=FastAPI()
 app.version = "0.1.0"
 
+Base.metadata.create_all(bind=engine)
 
 class JWTBearer(HTTPBearer):
     async def __call__(self, request: Request) :
@@ -26,7 +28,7 @@ class User(BaseModel):
 
 #Eschema
 class sch_movie_data(BaseModel):
-    id: int
+    id: Optional[int]=None
     title: str= Field(min_length=5, max_length=15)
     overview: str= Field(min_length=10, max_length=30)
     year: int = Field(le=2024)
@@ -77,16 +79,26 @@ movies_data = [
 async def run():
     return {"hola":"hola"}
 
+
 @app.get("/movies", tags=["movies"], response_model=list[sch_movie_data], status_code=200,dependencies=[Depends(JWTBearer())])
 def movies()->list[sch_movie_data]:
-    return JSONResponse(content=movies_data,status_code=200)
+    
+    db=Session()
+    result=db.query(MovieModel).all()
+    
+    return JSONResponse(content=jsonable_encoder(result),status_code=200)
 
 @app.get("/movies/{id}",tags=["movies"], response_model=sch_movie_data,status_code=404)
 def get_movies(id: int=Path(ge=1,le=10))->sch_movie_data:
-    for item in movies_data:
-        if item["id"]==id:
-            return JSONResponse(content=item)
-    return JSONResponse(content=[], status_code=404)
+   db=Session()
+   result=db.query(MovieModel).filter(MovieModel.id==id).first()
+   if not result:
+       return JSONResponse(content={"message":"no encontrado"}, status_code=404)
+
+   # for item in movies_data:
+    #    if item["id"]==id:
+     #       return JSONResponse(content=item)
+   return JSONResponse(content=jsonable_encoder(result), status_code=200)
 
 @app.get("/movies/",tags=["movies"], response_model=list[sch_movie_data], status_code=200)
 def get_movies_by_category(category:str= Query(min_length=5,max_length=15))->list[sch_movie_data]:
@@ -96,6 +108,10 @@ def get_movies_by_category(category:str= Query(min_length=5,max_length=15))->lis
 
 @app.post("/movies",tags=["movies"], response_model=dict,status_code=201)
 def create_movie(movie: sch_movie_data)->dict:
+    db=Session()
+    new_movie=MovieModel(**movie.model_dump())
+    db.add(new_movie)
+    db.commit()
     movies_data.append(movie)
     return JSONResponse(content={"mensaje": "Se agrego correctamente"},status_code=201)
 
